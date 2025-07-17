@@ -133,11 +133,11 @@ func (hv HostVars) Yes(missing bool, key string) bool {
 }
 
 func (hv HostVars) OSUser() string {
-	return hv.String("matrix_user_username", "matrix")
+	return hv.String("matrix_user_name", "matrix")
 }
 
 func (hv HostVars) OSGroup() string {
-	return hv.String("matrix_user_groupname", "matrix")
+	return hv.String("matrix_group_name", "matrix")
 }
 
 func (hv HostVars) OSPath() string {
@@ -155,6 +155,9 @@ func (hv HostVars) FQN(key string) string {
 	if v == "" {
 		if key == "grafana" {
 			key = "stats"
+		}
+		if key == "element_call" {
+			key = "call"
 		}
 		if base != "" {
 			return key + "." + base

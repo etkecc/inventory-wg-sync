@@ -6,12 +6,12 @@ toolchain go1.24.1
 
 require (
 	github.com/adrg/xdg v0.5.3
-	github.com/etkecc/go-ansible v0.0.0-20250131140828-a9b09ffb95ac
-	github.com/etkecc/go-kit v1.6.0
+	github.com/etkecc/go-ansible v0.0.0-20250429082915-d43687824383
+	github.com/etkecc/go-kit v1.7.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/exp v0.0.0-20250717185816-542afb5b7346 // indirect
+	golang.org/x/sys v0.34.0 // indirect
 )
