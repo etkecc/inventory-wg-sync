@@ -67,22 +67,22 @@ func (h *Host) HasTODOs() bool {
 	if h == nil {
 		return true
 	}
-	if strings.ToLower(h.Host) == todo {
+	if strings.EqualFold(h.Host, todo) {
 		return true
 	}
-	if strings.ToLower(h.User) == todo {
+	if strings.EqualFold(h.User, todo) {
 		return true
 	}
-	if strings.ToLower(h.SSHPass) == todo {
+	if strings.EqualFold(h.SSHPass, todo) {
 		return true
 	}
-	if strings.ToLower(h.BecomePass) == todo {
+	if strings.EqualFold(h.BecomePass, todo) {
 		return true
 	}
 	if slices.Contains(h.PrivateKeys, todo) {
 		return true
 	}
-	if strings.ToLower(h.Name) == todo {
+	if strings.EqualFold(h.Name, todo) {
 		return true
 	}
 
@@ -103,19 +103,40 @@ func NewHostsFile(f string, defaults *Host, only ...string) (*Inventory, error) 
 }
 
 func (i *Inventory) init() {
-	i.Groups = make(map[string][]*Host)
-	i.Groups[defaultGroup] = make([]*Host, 0)
+	if i == nil {
+		return
+	}
+	if i.cacheGroupVars == nil {
+		i.cacheGroupVars = map[string]*Host{}
+	}
+	if i.cacheGroups == nil {
+		i.cacheGroups = map[string][]string{}
+	}
+	if i.only == nil {
+		i.only = make([]string, 0)
+	}
 
-	i.GroupTree = make(map[string][]string)
-	i.GroupTree[defaultGroup] = make([]string, 0)
+	if i.Groups == nil {
+		i.Groups = map[string][]*Host{}
+		i.Groups[defaultGroup] = make([]*Host, 0)
+	}
 
-	i.GroupVars = make(map[string]map[string]string)
-	i.GroupVars[defaultGroup] = make(map[string]string)
+	if i.GroupTree == nil {
+		i.GroupTree = map[string][]string{}
+		i.GroupTree[defaultGroup] = make([]string, 0)
+	}
 
-	i.Hosts = make(map[string]*Host)
+	if i.GroupVars == nil {
+		i.GroupVars = map[string]map[string]string{}
+		i.GroupVars[defaultGroup] = map[string]string{}
+	}
 
-	i.cacheGroupVars = make(map[string]*Host)
-	i.cacheGroups = make(map[string][]string)
+	if i.Hosts == nil {
+		i.Hosts = map[string]*Host{}
+	}
+	if i.Paths == nil {
+		i.Paths = make([]string, 0)
+	}
 }
 
 // findAllGroups tries to find all groups related to the group. Experimental
@@ -249,26 +270,53 @@ func (i *Inventory) Match(m string) *Host {
 }
 
 // Merge does append and replace
+//
+//nolint:gocognit // intended
 func (i *Inventory) Merge(h2 *Inventory) {
-	if i.Groups == nil {
-		i.Groups = make(map[string][]*Host)
-	}
-	if i.Hosts == nil {
-		i.Hosts = make(map[string]*Host)
-	}
-	if i.Paths == nil {
-		i.Paths = make([]string, 0)
-	}
 	if h2 == nil {
 		return
 	}
 
-	i.Paths = kit.Uniq(append(i.Paths, h2.Paths...))
+	for k, v := range h2.cacheGroupVars {
+		i.cacheGroupVars[k] = v
+	}
 
-	for group := range h2.Groups {
+	for k, v := range h2.cacheGroups {
+		i.cacheGroups[k] = v
+	}
+
+	i.only = kit.Uniq(append(i.only, h2.only...))
+
+	for group, hosts := range h2.Groups {
 		if _, ok := i.Groups[group]; !ok {
 			i.Groups[group] = make([]*Host, 0)
 		}
+		i.Groups[group] = append(i.Groups[group], hosts...)
+	}
+
+	for group, vars := range h2.GroupVars {
+		if _, ok := i.GroupVars[group]; !ok {
+			i.GroupVars[group] = make(map[string]string)
+		}
+		for k, v := range vars {
+			i.GroupVars[group][k] = v
+		}
+	}
+
+	for group, children := range h2.GroupTree {
+		if _, ok := i.GroupTree[group]; !ok {
+			i.GroupTree[group] = make([]string, 0)
+		}
+		i.GroupTree[group] = kit.Uniq(append(i.GroupTree[group], children...))
+	}
+
+	i.Paths = kit.Uniq(append(i.Paths, h2.Paths...))
+
+	for group, hosts := range h2.Groups {
+		if _, ok := i.Groups[group]; !ok {
+			i.Groups[group] = make([]*Host, 0)
+		}
+		i.Groups[group] = append(i.Groups[group], hosts...)
 	}
 
 	for name, host := range h2.Hosts {

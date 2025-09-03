@@ -7,9 +7,9 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/etkecc/go-kit"
+	yaml "gopkg.in/yaml.v3"
 )
 
 // ParseInventory using ansible.cfg and hosts (ini) files
@@ -28,25 +28,25 @@ func ParseInventory(ansibleCfg, hostsini, limit string) *Inventory {
 	defaults := parseDefaultsFromAnsibleCfg(acfg)
 	inv := parseHostsFiles(paths, parseLimit(limit), defaults)
 	if inv == nil {
+		log.Println("no hosts found in inventories:", paths)
 		return nil
 	}
 
-	var wg sync.WaitGroup
-	for name := range inv.Hosts {
-		wg.Add(1)
-		go func(name string, wg *sync.WaitGroup) {
-			defer wg.Done()
-			inv.Hosts[name].Dirs, inv.Hosts[name].Files = parseAdditionalFiles(paths, name)
+	groupVars := getUsedGroupsVars(paths, inv)
+	wg := kit.NewWaitGroup()
+	for _, host := range inv.Hosts {
+		wg.Do(func() {
+			inv.Hosts[host.Name].Dirs, inv.Hosts[host.Name].Files = parseAdditionalFiles(paths, host.Name)
 
-			vars := parseHostVars(paths, name)
+			vars := parseHostVars(paths, groupVars[host.Group], host.Name)
 			if vars == nil {
 				return
 			}
-			inv.Hosts[name].Vars = vars
-			if sshPrivateKey := inv.Hosts[name].Vars.String("ansible_ssh_private_key_file"); sshPrivateKey != "" {
-				inv.Hosts[name].PrivateKeys = kit.Uniq(append(inv.Hosts[name].PrivateKeys, sshPrivateKey))
+			inv.Hosts[host.Name].Vars = vars
+			if sshPrivateKey := inv.Hosts[host.Name].Vars.String("ansible_ssh_private_key_file"); sshPrivateKey != "" {
+				inv.Hosts[host.Name].PrivateKeys = kit.Uniq(append(inv.Hosts[host.Name].PrivateKeys, sshPrivateKey))
 			}
-		}(name, &wg)
+		})
 	}
 	wg.Wait()
 	return inv
@@ -54,6 +54,8 @@ func ParseInventory(ansibleCfg, hostsini, limit string) *Inventory {
 
 func parseHostsFiles(paths, only []string, defaults *Host) *Inventory {
 	inv := &Inventory{}
+	inv.init()
+
 	for _, path := range paths {
 		parsedInv, err := NewHostsFile(path, defaults, only...)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -74,7 +76,77 @@ func parseHostsFiles(paths, only []string, defaults *Host) *Inventory {
 	return inv
 }
 
-func parseHostVars(hostsPaths []string, name string) HostVars {
+// getUsedGroupsVars returns map of group name to its vars for all actually used groups in inventory
+func getUsedGroupsVars(paths []string, inv *Inventory) map[string]HostVars {
+	// find all actually used groups
+	usedGroups := map[string]bool{}
+	for _, host := range inv.Hosts {
+		usedGroups[host.Group] = true
+	}
+
+	allGroupsVars := map[string]HostVars{}
+	for usedGroup := range usedGroups {
+		groupTree := inv.cacheGroups[usedGroup]
+		if len(groupTree) == 0 {
+			// set empty value to avoid dealing with nil later
+			allGroupsVars[usedGroup] = HostVars{}
+		}
+		kit.Reverse(groupTree) // we need specific order to properly override vars
+		groupVars := HostVars{}
+		for _, group := range groupTree {
+			for k, v := range parseGroupVars(paths, group) {
+				groupVars[k] = v
+			}
+		}
+		allGroupsVars[usedGroup] = groupVars
+	}
+
+	return allGroupsVars
+}
+
+// parseGroupVars returns group vars for a group (the first found file wins)
+func parseGroupVars(hostsPaths []string, group string) HostVars {
+	allpaths := []string{}
+	for _, hostsPath := range hostsPaths {
+		groupPath := path.Join(path.Dir(hostsPath), "/group_vars/", group)
+		// if groupPath file exists, add to list
+		if _, err := os.Stat(groupPath); err == nil {
+			allpaths = append(allpaths, groupPath)
+		}
+	}
+	allpaths = kit.Uniq(allpaths)
+
+	for _, groupPath := range allpaths {
+		vars, err := parseGroupVarsFile(groupPath)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Println("cannot parse", groupPath, "error:", err)
+			continue
+		}
+		if vars != nil {
+			return vars
+		}
+	}
+
+	return nil
+}
+
+// parseGroupVarsFile is basically the same as NewHostVarsFile,
+// but without any optimizations or tricks of caching
+func parseGroupVarsFile(groupVarsPath string) (HostVars, error) {
+	fh, err := os.Open(groupVarsPath)
+	if err != nil {
+		return nil, err
+	}
+	defer fh.Close()
+
+	var vars map[string]any
+	if err := yaml.NewDecoder(fh).Decode(&vars); err != nil {
+		return nil, err
+	}
+	return vars, nil
+}
+
+func parseHostVars(hostsPaths []string, groupVars HostVars, name string) HostVars {
 	allvars := []HostVars{}
 	for _, hostsPath := range hostsPaths {
 		varsPath := path.Join(path.Dir(hostsPath), "/host_vars/", name, "/vars.yml")
@@ -90,11 +162,12 @@ func parseHostVars(hostsPaths []string, name string) HostVars {
 	}
 
 	final := HostVars{}
+	for k, v := range groupVars {
+		final[k] = v
+	}
+
 	for _, vars := range allvars {
 		for k, v := range vars {
-			if _, ok := final[k]; ok {
-				continue
-			}
 			final[k] = v
 		}
 	}

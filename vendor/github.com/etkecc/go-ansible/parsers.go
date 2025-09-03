@@ -160,7 +160,7 @@ func parseLimit(input string) []string {
 	return limit
 }
 
-func parseDefaultsFromAnsibleCfg(cfg *AnsibleCfg) *Host {
+func parseDefaultsFromAnsibleCfg(cfg *Cfg) *Host {
 	base := &Host{}
 	if cfg == nil {
 		return base
@@ -184,7 +184,7 @@ func parseDefaultsFromAnsibleCfg(cfg *AnsibleCfg) *Host {
 	return base
 }
 
-func parseAllInventoryPaths(static string, cfg *AnsibleCfg) []string {
+func parseAllInventoryPaths(static string, cfg *Cfg) []string {
 	all := []string{static}
 	if cfg == nil {
 		return all

@@ -34,7 +34,7 @@ func NewHostVarsFile(f string) (HostVars, error) {
 	defer fh.Close()
 
 	var vars map[string]any
-	if err = yaml.NewDecoder(fh).Decode(&vars); err != nil {
+	if err := yaml.NewDecoder(fh).Decode(&vars); err != nil {
 		return nil, err
 	}
 	precacheDomain(vars)
@@ -50,7 +50,7 @@ func precacheDomain(hv HostVars) {
 // HasTODOs returns true if there are any TODOs in hostvars
 func (hv HostVars) HasTODOs() bool {
 	for k := range hv {
-		if strings.ToLower(k) == todo || strings.ToLower(hv.String(k)) == todo {
+		if strings.EqualFold(k, todo) || strings.EqualFold(hv.string(k), todo) {
 			return true
 		}
 	}
@@ -59,22 +59,9 @@ func (hv HostVars) HasTODOs() bool {
 
 // String returns string value
 func (hv HostVars) String(key string, optionalDefault ...string) string {
-	var zero string
-
-	if len(optionalDefault) > 0 {
-		zero = optionalDefault[0]
-	}
-
-	v, ok := hv[key]
-	if !ok {
-		return zero
-	}
-	value, ok := v.(string)
-	if !ok {
-		return zero
-	}
-
-	return value
+	value := hv.string(key, optionalDefault...)
+	base, domain := hv.Domain()
+	return strings.ReplaceAll(strings.ReplaceAll(value, "{{ matrix_domain }}", domain), "{{ base_domain }}", base)
 }
 
 // StringSlice returns string slice value
@@ -133,15 +120,15 @@ func (hv HostVars) Yes(missing bool, key string) bool {
 }
 
 func (hv HostVars) OSUser() string {
-	return hv.String("matrix_user_name", "matrix")
+	return hv.string("matrix_user_name", "matrix")
 }
 
 func (hv HostVars) OSGroup() string {
-	return hv.String("matrix_group_name", "matrix")
+	return hv.string("matrix_group_name", "matrix")
 }
 
 func (hv HostVars) OSPath() string {
-	return hv.String("matrix_base_data_path", "/matrix")
+	return hv.string("matrix_base_data_path", "/matrix")
 }
 
 // FQN attempts to parse FQN var and replaces {{ matrix_domain }}, {{ base_domain }}, etc.
@@ -165,30 +152,29 @@ func (hv HostVars) FQN(key string) string {
 		return key + "." + domain
 	}
 
-	v = strings.ReplaceAll(strings.ReplaceAll(v, "{{ matrix_domain }}", domain), "{{ base_domain }}", base)
 	if repase := hv.mustReparse(v); repase != "" {
 		repase = strings.TrimSuffix(strings.TrimPrefix(repase, "matrix_server_fqn_"), "_hostname")
 		return hv.FQN(repase)
 	}
+
 	return v
 }
 
 // Domain returns base domain (if exists) and domain
 func (hv HostVars) Domain() (base, domain string) {
-	if cachedDomain := hv.String(cachePrefix + "domain"); cachedDomain != "" {
-		return hv.String(cachePrefix + "base"), cachedDomain
+	if cachedDomain := hv.string(cachePrefix + "domain"); cachedDomain != "" {
+		return hv.string(cachePrefix + "base"), cachedDomain
 	}
 
-	base = strings.TrimSpace(hv.String("base_domain"))
-	domain = strings.ReplaceAll(strings.TrimSpace(hv.String("matrix_domain")), "{{ base_domain }}", base)
+	base = strings.TrimSpace(hv.string("base_domain"))
+	domain = strings.ReplaceAll(strings.TrimSpace(hv.string("matrix_domain")), "{{ base_domain }}", base)
 
 	return base, domain
 }
 
 // Admin parses admin MXID
 func (hv HostVars) Admin() string {
-	base, domain := hv.Domain()
-	return strings.ReplaceAll(strings.ReplaceAll(hv.String("matrix_admin"), "{{ matrix_domain }}", domain), "{{ base_domain }}", base)
+	return hv.String("matrix_admin")
 }
 
 // Admins parses admin MXIDs
@@ -222,7 +208,7 @@ func (hv HostVars) IsAdmin(input string) bool {
 func (hv HostVars) Email() string {
 	keys := []string{"etke_service_monitoring_email", "etke_order_email", "etke_subscription_email"}
 	for _, key := range keys {
-		if email := hv.String(key); email != "" {
+		if email := hv.string(key); email != "" {
 			return email
 		}
 	}
@@ -234,7 +220,7 @@ func (hv HostVars) Emails() []string {
 	emails := []string{}
 	keys := []string{"etke_service_monitoring_email", "etke_order_email", "etke_subscription_email"}
 	for _, key := range keys {
-		if email := hv.String(key); email != "" {
+		if email := hv.string(key); email != "" {
 			emails = append(emails, email)
 		}
 	}
@@ -257,7 +243,7 @@ func (hv HostVars) MaintenanceEnabled() bool {
 func (hv HostVars) MaintenanceBranch() string {
 	keys := []string{"etke_service_maintenance_branch", "injector_playbook_tag"}
 	for _, key := range keys {
-		if branch := hv.String(key); branch != "" {
+		if branch := hv.string(key); branch != "" {
 			return branch
 		}
 	}
@@ -270,4 +256,23 @@ func (hv HostVars) mustReparse(value string) string {
 	}
 
 	return strings.TrimSpace(strings.Replace(strings.Replace(value, "{{", "", 1), "}}", "", 1))
+}
+
+func (hv HostVars) string(key string, optionalDefault ...string) string {
+	var zero string
+
+	if len(optionalDefault) > 0 {
+		zero = optionalDefault[0]
+	}
+
+	v, ok := hv[key]
+	if !ok {
+		return zero
+	}
+	value, ok := v.(string)
+	if !ok {
+		return zero
+	}
+
+	return value
 }

@@ -9,11 +9,12 @@ import (
 
 const defaultSection = "unknown"
 
-type AnsibleCfg struct {
+// Cfg represents the ansible.cfg file
+type Cfg struct {
 	Config map[string]map[string]string
 }
 
-func NewAnsibleCfgFile(f string) (*AnsibleCfg, error) {
+func NewAnsibleCfgFile(f string) (*Cfg, error) {
 	if f == "" {
 		return nil, nil
 	}
@@ -23,12 +24,12 @@ func NewAnsibleCfgFile(f string) (*AnsibleCfg, error) {
 	}
 	defer fh.Close()
 
-	cfg := &AnsibleCfg{}
+	cfg := &Cfg{}
 	cfg.parse(fh)
 	return cfg, nil
 }
 
-func (a *AnsibleCfg) parse(input io.Reader) {
+func (a *Cfg) parse(input io.Reader) {
 	a.Config = make(map[string]map[string]string)
 
 	activeSectionName := defaultSection
