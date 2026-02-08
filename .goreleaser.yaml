@@ -14,7 +14,7 @@ builds:
       - -extldflags "-static"
     flags:
       - -tags=timetzdata,goolm
-    main: ./cmd/ansible-wg-sync
+    main: ./cmd/inventory-wg-sync
     goos:
       - linux
       - windows

@@ -1,4 +1,4 @@
-module github.com/etkecc/ansible-wg-sync
+module github.com/etkecc/inventory-wg-sync
 
 go 1.24.0
 

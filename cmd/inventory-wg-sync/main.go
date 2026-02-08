@@ -13,19 +13,19 @@ import (
 	"github.com/etkecc/go-ansible"
 	"github.com/etkecc/go-kit"
 
-	"github.com/etkecc/ansible-wg-sync/internal/config"
+	"github.com/etkecc/inventory-wg-sync/internal/config"
 )
 
 var (
 	withDebug   bool
-	logger      = log.New(os.Stdout, "[ansible-wg-sync] ", 0)
+	logger      = log.New(os.Stdout, "[inventory-wg-sync] ", 0)
 	domainRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]$`)
 )
 
 func main() {
-	path, err := xdg.SearchConfigFile("ansible-wg-sync.yml")
+	path, err := xdg.SearchConfigFile("inventory-wg-sync.yml")
 	if err != nil {
-		logger.Fatal("cannot find the ansible-wg-sync.yml config file: ", err, ", ensure it is in $XDG_CONFIG_DIRS or $XDG_CONFIG_HOME of the root(!) user")
+		logger.Fatal("cannot find the inventory-wg-sync.yml config file: ", err, ", ensure it is in $XDG_CONFIG_DIRS or $XDG_CONFIG_HOME of the root(!) user")
 	}
 	if !isRoot() {
 		logger.Println("WARNING: not running as root, profile updates will fail")
