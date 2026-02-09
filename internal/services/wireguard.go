@@ -1,39 +1,52 @@
-package main
+package services
 
 import (
 	"bytes"
+	"errors"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"text/template"
 
-	"github.com/etkecc/inventory-wg-sync/internal/config"
+	"github.com/etkecc/inventory-wg-sync/internal/models"
+	"github.com/etkecc/inventory-wg-sync/internal/utils"
 )
 
-func handleWireGuard(cfg *config.Config, allowedIPs, postUp, postDown []string) error {
+var (
+	interfaceNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,14}$`)
+	interfaceByName    = net.InterfaceByName
+	runSystemctlFunc   = runSystemctl
+)
+
+func SyncWireGuard(cfg *models.Config, allowedIPs []string) error {
 	if cfg.ProfilePath == "" {
 		return nil
 	}
 
-	logger.Println("updating WireGuard profle", cfg.ProfilePath)
+	utils.Log("updating WireGuard profile", cfg.ProfilePath)
 	name := strings.Replace(filepath.Base(cfg.ProfilePath), filepath.Ext(cfg.ProfilePath), "", 1)
-	if err := updateWGProfile(name, allowedIPs, postUp, postDown, cfg.ProfilePath, cfg.Table); err != nil {
+	if !interfaceNameRegex.MatchString(name) {
+		return errors.New("wireguard interface name is invalid")
+	}
+	if err := updateWGProfile(name, allowedIPs, cfg.PostUp, cfg.PostDown, cfg.ProfilePath, cfg.Table); err != nil {
 		return err
 	}
 
-	logger.Println("restarting WireGuard interface", name)
+	utils.Log("restarting WireGuard interface", name)
 
 	// If the interface doesn't exist, start the instantiated systemd service.
 	//
 	// Otherwise, restart it fully.
 	// Reloading (which uses `wg syncconf`) is less disruptive, but doesn't apply `AllowedIPs` changes.
 
-	if err := exec.Command("wg", "show", name).Run(); err != nil {
-		return exec.Command("systemctl", "start", "wg-quick@"+name).Run() //nolint:gosec // that's ok
+	if !interfaceExists(name) {
+		return startUnit(name)
 	}
-	return exec.Command("systemctl", "restart", "wg-quick@"+name).Run() //nolint:gosec // that's ok
+	return restartUnit(name)
 }
 
 func updateWGProfile(name string, allowedIPs, postUp, postDown []string, path string, table int) error {
@@ -87,7 +100,7 @@ func filterOutUnsupportedIPs(lines, allowedIPs []string) []string {
 		allowedIPsNew := filterOutCIDRsContainingChar(allowedIPs, ".")
 		diff := len(allowedIPs) - len(allowedIPsNew)
 		if diff > 0 {
-			logger.Println("filtered out", diff, "IPv4 CIDRs due to the profile's lack of IPv4 support")
+			utils.Log("filtered out", diff, "IPv4 CIDRs due to the profile's lack of IPv4 support")
 			allowedIPs = allowedIPsNew
 		}
 	}
@@ -95,7 +108,7 @@ func filterOutUnsupportedIPs(lines, allowedIPs []string) []string {
 		allowedIPsNew := filterOutCIDRsContainingChar(allowedIPs, ":")
 		diff := len(allowedIPs) - len(allowedIPsNew)
 		if diff > 0 {
-			logger.Println("filtered out", diff, "IPv6 CIDRs due to the profile's lack of IPv6 support")
+			utils.Log("filtered out", diff, "IPv6 CIDRs due to the profile's lack of IPv6 support")
 			allowedIPs = allowedIPsNew
 		}
 	}
@@ -125,4 +138,25 @@ func applyVars(tplString string, vars map[string]any) ([]byte, error) {
 		return nil, err
 	}
 	return result.Bytes(), nil
+}
+
+func interfaceExists(name string) bool {
+	_, err := interfaceByName(name)
+	return err == nil
+}
+
+func startUnit(name string) error {
+	return runSystemctlFunc("start", name)
+}
+
+func restartUnit(name string) error {
+	return runSystemctlFunc("restart", name)
+}
+
+func runSystemctl(action, name string) error {
+	if name == "" {
+		return errors.New("wireguard interface name is empty")
+	}
+	unit := "wg-quick@" + name
+	return exec.Command("systemctl", action, unit).Run()
 }

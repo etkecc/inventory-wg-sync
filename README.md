@@ -15,13 +15,15 @@ Sync WireGuard `AllowedIPs` from Ansible inventory files and keep a WireGuard pr
 - Go 1.21+ if you plan to build from source.
 
 ## Install
+Download the latest release from GitHub and place the binary in your `PATH`, or
+
 ```bash
-go install ./cmd/inventory-wg-sync
+just install
 ```
 
 Or build a static binary:
 ```bash
-go build -o inventory-wg-sync ./cmd/inventory-wg-sync
+just build
 ```
 
 ## Configuration

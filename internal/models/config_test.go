@@ -1,4 +1,4 @@
-package config
+package models
 
 import (
 	"os"
@@ -47,5 +47,22 @@ debug: true
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Read() = %#v, want %#v", got, want)
+	}
+}
+
+func TestRead_MissingFile(t *testing.T) {
+	if _, err := Read(filepath.Join(t.TempDir(), "missing.yml")); err == nil {
+		t.Fatalf("Read() expected error for missing file")
+	}
+}
+
+func TestRead_InvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(path, []byte("inventory_paths: ["), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if _, err := Read(path); err == nil {
+		t.Fatalf("Read() expected error for invalid YAML")
 	}
 }
