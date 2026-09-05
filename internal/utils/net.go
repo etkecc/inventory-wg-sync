@@ -10,9 +10,7 @@ import (
 
 var domainRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]$`)
 
-// DetermineCIDRs takes a host (CIDR or IPv4/IPv6 address or hostname) and determines the network CIDRs for it.
-// For IP addresses, a /32 or /128 CIDR is returned depending on the address type (IPv4 or IPv6, respectively).
-// For hostnames, a combination of multiple IPv4 and IPv6 CIDRs may be returned, depending on A/AAAA DNS records.
+// DetermineCIDRs resolves a host (CIDR, IP, or hostname) to its network CIDRs (/32, /128, or one per A/AAAA record)
 func DetermineCIDRs(host string) []string {
 	// if CIDR, return as is
 	if _, _, err := net.ParseCIDR(host); err == nil {

@@ -38,11 +38,7 @@ func SyncWireGuard(cfg *models.Config, allowedIPs []string) error {
 
 	utils.Log("restarting WireGuard interface", name)
 
-	// If the interface doesn't exist, start the instantiated systemd service.
-	//
-	// Otherwise, restart it fully.
-	// Reloading (which uses `wg syncconf`) is less disruptive, but doesn't apply `AllowedIPs` changes.
-
+	// start the interface if missing, otherwise restart fully (reload skips AllowedIPs changes)
 	if !interfaceExists(name) {
 		return startUnit(name)
 	}
@@ -116,7 +112,7 @@ func filterOutUnsupportedIPs(lines, allowedIPs []string) []string {
 	return allowedIPs
 }
 
-// filterOutCIDRsContainingChar removes CIDRs from the allowedIPs list if they contain a given character (e.g. "." for IPv4 and ":" for IPv6)
+// filterOutCIDRsContainingChar removes CIDRs containing a given character (e.g. "." for IPv4, ":" for IPv6)
 func filterOutCIDRsContainingChar(allowedIPs []string, needle string) []string {
 	result := make([]string, 0, len(allowedIPs))
 	for _, ip := range allowedIPs {
